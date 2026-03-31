@@ -63,8 +63,10 @@ function staticBadge(emoji, label, bg, fg) {
 function timeUntil(ts) {
   const s = Math.max(0, Math.floor(ts - Date.now() / 1000));
   if (s === 0) return "now";
-  const h = s / 3600 | 0, m = (s % 3600) / 60 | 0;
-  return h > 0 ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m`;
+  const d = s / 86400 | 0, h = (s % 86400) / 3600 | 0, m = (s % 3600) / 60 | 0;
+  if (d > 0) return `${d}d${h}h`;
+  if (h > 0) return `${h}h${String(m).padStart(2, "0")}m`;
+  return `${m}m`;
 }
 
 function gitBranch(cwd) {
@@ -144,7 +146,7 @@ process.stdin.on("end", () => {
     {
       const p = Math.round(five?.used_percentage ?? 0);
       let v = five?.used_percentage != null ? `${p}%` : "-";
-      if (p >= 60 && five?.resets_at) v += ` ↻${timeUntil(five.resets_at)}`;
+      if (five?.resets_at) v += `(${timeUntil(five.resets_at)})`;
       L2.push(badge(p, "5h", v));
     }
 
@@ -153,7 +155,7 @@ process.stdin.on("end", () => {
     {
       const p = Math.round(seven?.used_percentage ?? 0);
       let v = seven?.used_percentage != null ? `${p}%` : "-";
-      if (p >= 60 && seven?.resets_at) v += ` ↻${timeUntil(seven.resets_at)}`;
+      if (seven?.resets_at) v += `(${timeUntil(seven.resets_at)})`;
       L2.push(badge(p, "7d", v));
     }
 
