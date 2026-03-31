@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 const RST = "\x1b[0m";
 const BOLD = "\x1b[1m";
 const S = ""; // badge間スペーサーなし
+const THEME = process.argv[2] || "default";
 
 // --- Color utils ---
 
@@ -80,6 +81,85 @@ function gitBranch(cwd) {
 
 function fmt(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
 
+// --- Simple theme utils ---
+
+function simpleStatusColor(pct) {
+  if (pct <= 50) return "\x1b[38;2;110;185;165m"; // muted teal
+  if (pct <= 80) return "\x1b[38;2;195;175;105m"; // muted amber
+  return "\x1b[38;2;195;115;115m";                 // muted rose
+}
+
+function renderSimple(d) {
+  const BG  = "\x1b[48;2;28;28;34m";
+  const DIM = "\x1b[38;2;85;85;100m";
+  const TXT = "\x1b[38;2;165;165;178m";
+  const SEP = ` ${BG}${DIM}│ `;
+
+  const L1 = [];
+  const L2 = [];
+
+  // Model
+  const raw = d.model?.display_name || d.model?.id || "";
+  const name = raw.replace(/^Claude\s*/i, "").replace(/\s*\(.*\)/, "").split(/\s+/)[0];
+  const mc = { Opus: "\x1b[38;2;190;150;170m", Sonnet: "\x1b[38;2;190;170;130m", Haiku: "\x1b[38;2;130;190;160m" };
+  const me = { Opus: "🔮", Sonnet: "✨", Haiku: "🍃" };
+  let effortTag = "";
+  try {
+    const st = JSON.parse(readFileSync(`${homedir()}/.claude/settings.json`, "utf8"));
+    if (st.effortLevel) {
+      const m = { low: "l", medium: "m", high: "h", max: "mx" };
+      effortTag = `/${m[st.effortLevel] || st.effortLevel}`;
+    }
+  } catch {}
+  if (name) L1.push(`${mc[name] || TXT}${me[name] || "●"} ${BOLD}${name}${RST}${BG}${mc[name] || TXT}${effortTag}`);
+
+  // Dir + Branch
+  const cwd = d.workspace?.current_dir || d.cwd || "";
+  const branch = gitBranch(cwd);
+  const dir = cwd.split("/").pop() || "";
+  if (dir) {
+    const br = branch ? ` ${DIM}→ ${TXT}${branch}` : "";
+    L1.push(`${TXT}${dir}${br}`);
+  }
+
+  // Context
+  const ctxPct = Math.round(d.context_window?.used_percentage ?? 0);
+  L1.push(`${DIM}ctx ${simpleStatusColor(ctxPct)}${BOLD}${ctxPct}%`);
+
+  // 5h
+  const five = d.rate_limits?.five_hour;
+  const p5 = Math.round(five?.used_percentage ?? 0);
+  let v5 = `${p5}%`;
+  if (five?.resets_at) v5 += `${RST}${BG}${DIM}(${timeUntil(five.resets_at)})`;
+  L2.push(`${RST}${BG}${DIM}5h ${simpleStatusColor(p5)}${BOLD}${v5}`);
+
+  // 7d
+  const seven = d.rate_limits?.seven_day;
+  const p7 = Math.round(seven?.used_percentage ?? 0);
+  L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${p7}%`);
+
+  // Cost
+  const cost = d.cost?.total_cost_usd;
+  if (cost != null) L2.push(`${RST}${BG}${DIM}$ ${TXT}${cost.toFixed(2)}`);
+
+  // Duration
+  const dur = d.cost?.total_duration_ms;
+  if (dur != null) {
+    const s = dur / 1000 | 0;
+    const h = s / 3600 | 0, m = (s % 3600) / 60 | 0;
+    const t = h > 0 ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m`;
+    L2.push(`${RST}${BG}${DIM}${t}`);
+  }
+
+  if (THEME === "simple-1") {
+    process.stdout.write(`${BG} ${[...L1, ...L2].join(SEP)} ${RST}\n`);
+  } else {
+    let out = `${BG} ${L1.join(SEP)} ${RST}`;
+    if (L2.length) out += `\n${BG} ${L2.join(SEP)} ${RST}`;
+    process.stdout.write(out + "\n");
+  }
+}
+
 // --- Main ---
 
 let input = "";
@@ -88,6 +168,9 @@ process.stdin.on("data", (c) => (input += c));
 process.stdin.on("end", () => {
   try {
     const d = JSON.parse(input);
+
+    if (THEME.startsWith("simple")) { renderSimple(d); return; }
+
     const L1 = [];
     const L2 = [];
 

@@ -2,24 +2,44 @@
 
 Minimal & refined status line for [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
 
+## Themes
+
+### Default — full badge UI (2 lines)
+
 ```
 [🔮 Opus/h][📁 myproject → main][$] 3.45 [↑120/↓30]
 [ctx]   25%(250k)   [5h] 12%(3h42m) [7d] 8%(5d12h) [⏱45m]
 ```
 
+### `simple-2` — low cognitive load (2 lines)
+
+```
+🔮 Opus/h │ myproject → main │ ctx 25%
+5h 12%(3h42m) │ 7d 8% │ $ 3.45 │ 1h00m
+```
+
+### `simple-1` — low cognitive load (1 line)
+
+```
+🔮 Opus/h │ myproject → main │ ctx 25% │ 5h 12%(3h42m) │ 7d 8% │ $ 3.45 │ 1h00m
+```
+
+The `simple` themes use a uniform dark background with muted colors (teal/amber/rose) to minimize visual noise while keeping all essential info.
+
 ## Features
 
-- **TrueColor badge UI** — label + value with 2-tone background colors
-- **Context bar** — visual progress indicator with centered percentage & token count
+- **3 themes** — `default` (rich badges), `simple-2` (2-line flat), `simple-1` (1-line flat)
+- **TrueColor badge UI** (default) — label + value with 2-tone background colors
+- **Context bar** (default) — visual progress indicator with centered percentage & token count
 - **Rate limits** — 5-hour / 7-day usage with remaining time until reset
 - **Color gradient** — green → yellow → red based on usage
   - ctx: green ≤50%, yellow ≤85%, red >85%
   - 5h/7d: green ≤50%, red >50%
 - **Model badge** — per-model emoji & color (🔮 Opus / ✨ Sonnet / 🍃 Haiku) with effort level
-- **Git branch** — `📁 dir → branch` in a single badge
-- **Session cost** — `$` badge with running total
-- **Line diff** — `↑added/↓removed` with k-notation for large numbers
-- **Session duration** — `⏱` elapsed time
+- **Git branch** — `dir → branch` display
+- **Session cost** — running total in USD
+- **Line diff** (default) — `↑added/↓removed` with k-notation for large numbers
+- **Session duration** — elapsed time
 - **Zero dependencies** — pure Node.js, no external packages
 
 ## Install
@@ -36,25 +56,25 @@ Add to `~/.claude/settings.json`:
 {
   "statusLine": {
     "type": "command",
-    "command": "masao-cc-statusline"
+    "command": "npx -y masao-cc-status-line"
   }
 }
 ```
 
-Or run without installing:
+To use a simple theme:
 
 ```json
 {
   "statusLine": {
     "type": "command",
-    "command": "npx masao-cc-status-line"
+    "command": "npx -y masao-cc-status-line simple-2"
   }
 }
 ```
 
 > **Note:** If `npx` or `node` doesn't work in your environment, use the absolute path:
 > ```json
-> "command": "/path/to/node /path/to/masao-cc-status-line/bin/cli.js"
+> "command": "/path/to/node /path/to/masao-cc-status-line/bin/cli.js simple-2"
 > ```
 
 ## How it works
@@ -62,7 +82,7 @@ Or run without installing:
 Claude Code pipes session data as JSON to stdin. The script parses it and outputs ANSI-colored text to stdout.
 
 ```
-stdin (JSON) → masao-cc-statusline → stdout (ANSI)
+stdin (JSON) → masao-cc-status-line [theme] → stdout (ANSI)
 ```
 
 ### Input fields used
@@ -83,7 +103,14 @@ stdin (JSON) → masao-cc-statusline → stdout (ANSI)
 ### Preview locally
 
 ```bash
+# Default theme
 echo '{"model":{"display_name":"Claude Opus 4.6"},"workspace":{"current_dir":"/tmp/myproject"},"cost":{"total_cost_usd":3.45,"total_duration_ms":3600000,"total_lines_added":120,"total_lines_removed":30},"context_window":{"used_percentage":25,"total_input_tokens":250000},"rate_limits":{"five_hour":{"used_percentage":12,"resets_at":'$(($(date +%s)+13420))'},"seven_day":{"used_percentage":8,"resets_at":'$(($(date +%s)+475200))'}}}' | npx masao-cc-status-line
+
+# Simple theme (2-line)
+echo '...' | npx masao-cc-status-line simple-2
+
+# Simple theme (1-line)
+echo '...' | npx masao-cc-status-line simple-1
 ```
 
 ## License
