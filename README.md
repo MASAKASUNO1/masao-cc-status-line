@@ -13,6 +13,8 @@ Minimal & refined status line for [Claude Code](https://docs.anthropic.com/en/do
 
 ### `simple-2` — low cognitive load (2 lines)
 
+![simple-2](assets/simple-2.png)
+
 ```
 🔮 Opus/h │ myproject → main │ ctx 25%
 5h 12%(3h42m) │ 7d 8% │ $ 3.45 │ 1h00m
