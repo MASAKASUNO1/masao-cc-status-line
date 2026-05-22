@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execSync, spawn } from "node:child_process";
+import { readFileSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 const RST = "\x1b[0m";
@@ -81,6 +81,39 @@ function gitBranch(cwd) {
 
 function fmt(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
 
+// codexbar から codex のセッション(5h)/週(7d)使用率を取得。
+// codexbar 呼び出しは遅い(~0.5s)ため、キャッシュを即読みしつつ
+// 古ければバックグラウンドで更新する。
+function codexUsage() {
+  const dir = `${homedir()}/.cache`;
+  const cacheFile = `${dir}/cc-statusline-codex.json`;
+  const TTL = 60_000; // 60秒
+
+  let data = null, stale = true;
+  try {
+    const arr = JSON.parse(readFileSync(cacheFile, "utf8"));
+    const u = arr?.[0]?.usage;
+    if (u) {
+      data = {
+        session: Math.round(u.primary?.usedPercent ?? 0),
+        week: Math.round(u.secondary?.usedPercent ?? 0),
+      };
+    }
+    stale = Date.now() - statSync(cacheFile).mtimeMs > TTL;
+  } catch { stale = true; }
+
+  if (stale) {
+    try {
+      mkdirSync(dir, { recursive: true });
+      const child = spawn("sh", ["-c",
+        `PATH="$PATH:/opt/homebrew/bin:/usr/local/bin" codexbar usage --provider codex --source cli --json > "${cacheFile}.tmp" 2>/dev/null && mv "${cacheFile}.tmp" "${cacheFile}"`,
+      ], { detached: true, stdio: "ignore" });
+      child.unref();
+    } catch {}
+  }
+  return data;
+}
+
 // --- Simple theme utils ---
 
 function simpleStatusColor(pct) {
@@ -138,17 +171,30 @@ function renderSimple(d) {
   const p7 = Math.round(seven?.used_percentage ?? 0);
   L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${p7}%`);
 
-  // Cost
-  const cost = d.cost?.total_cost_usd;
-  if (cost != null) L2.push(`${RST}${BG}${DIM}$ ${TXT}${cost.toFixed(2)}`);
+  if (THEME === "slave") {
+    // Codex 使用率 (session 5h / week 7d)。コスト・継続時間の代わり。
+    const cdx = codexUsage();
+    if (cdx) {
+      L2.push(
+        `${RST}${BG}${DIM}cdx ${simpleStatusColor(cdx.session)}${BOLD}${cdx.session}%` +
+        `${RST}${BG}${DIM}/${simpleStatusColor(cdx.week)}${BOLD}${cdx.week}%`
+      );
+    } else {
+      L2.push(`${RST}${BG}${DIM}cdx ${TXT}—`);
+    }
+  } else {
+    // Cost
+    const cost = d.cost?.total_cost_usd;
+    if (cost != null) L2.push(`${RST}${BG}${DIM}$ ${TXT}${cost.toFixed(2)}`);
 
-  // Duration
-  const dur = d.cost?.total_duration_ms;
-  if (dur != null) {
-    const s = dur / 1000 | 0;
-    const h = s / 3600 | 0, m = (s % 3600) / 60 | 0;
-    const t = h > 0 ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m`;
-    L2.push(`${RST}${BG}${DIM}${t}`);
+    // Duration
+    const dur = d.cost?.total_duration_ms;
+    if (dur != null) {
+      const s = dur / 1000 | 0;
+      const h = s / 3600 | 0, m = (s % 3600) / 60 | 0;
+      const t = h > 0 ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m`;
+      L2.push(`${RST}${BG}${DIM}${t}`);
+    }
   }
 
   if (THEME === "simple-1") {
@@ -169,7 +215,7 @@ process.stdin.on("end", () => {
   try {
     const d = JSON.parse(input);
 
-    if (THEME.startsWith("simple")) { renderSimple(d); return; }
+    if (THEME.startsWith("simple") || THEME === "slave") { renderSimple(d); return; }
 
     const L1 = [];
     const L2 = [];

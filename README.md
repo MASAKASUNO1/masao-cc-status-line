@@ -28,9 +28,27 @@ Minimal & refined status line for [Claude Code](https://docs.anthropic.com/en/do
 
 The `simple` themes use a uniform dark background with muted colors (teal/amber/rose) to minimize visual noise while keeping all essential info.
 
+### `slave` — Codex usage instead of cost/duration (2 lines)
+
+Same layout as `simple-2`, but the `$ 3.45 │ 1h00m` part (cost & duration) is replaced with Codex usage pulled from [`codexbar`](https://github.com/) — session (5h) / week (7d):
+
+```
+🔮 Opus/h │ myproject → main │ ctx 25%
+5h 12%(3h42m) │ 7d 8% │ cdx 1%/8%
+```
+
+`cdx <session%>/<week%>` is sourced from `codexbar usage --provider codex`:
+
+| Part | codexbar field |
+|---|---|
+| session (left) | `usage.primary.usedPercent` (5h window) |
+| week (right) | `usage.secondary.usedPercent` (7d / 10080-min window) |
+
+Since `codexbar` is slow (~0.5s+), results are cached at `~/.cache/cc-statusline-codex.json` (60s TTL). The status line reads the cache instantly (~0.05s) and refreshes it in a detached background process when stale. The first render shows `cdx —` until the cache is populated. Requires the `codexbar` binary on `PATH` (`/opt/homebrew/bin` and `/usr/local/bin` are auto-appended); if it's missing it stays `cdx —` without erroring.
+
 ## Features
 
-- **3 themes** — `default` (rich badges), `simple-2` (2-line flat), `simple-1` (1-line flat)
+- **4 themes** — `default` (rich badges), `simple-2` (2-line flat), `simple-1` (1-line flat), `slave` (simple-2 + Codex usage via `codexbar`)
 - **TrueColor badge UI** (default) — label + value with 2-tone background colors
 - **Context bar** (default) — visual progress indicator with centered percentage & token count
 - **Rate limits** — 5-hour / 7-day usage with remaining time until reset
