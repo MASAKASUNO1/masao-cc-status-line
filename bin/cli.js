@@ -97,6 +97,7 @@ function codexUsage() {
       data = {
         session: Math.round(u.primary?.usedPercent ?? 0),
         week: Math.round(u.secondary?.usedPercent ?? 0),
+        email: u.accountEmail || u.identity?.accountEmail || arr?.[0]?.openaiDashboard?.signedInEmail || "",
       };
     }
     stale = Date.now() - statSync(cacheFile).mtimeMs > TTL;
@@ -112,6 +113,14 @@ function codexUsage() {
     } catch {}
   }
   return data;
+}
+
+// Claude アカウントのメールアドレスの prefix (@より前) を取得。
+function claudeEmailPrefix() {
+  try {
+    const d = JSON.parse(readFileSync(`${homedir()}/.claude.json`, "utf8"));
+    return (d.oauthAccount?.emailAddress || "").split("@")[0];
+  } catch { return ""; }
 }
 
 // --- Simple theme utils ---
@@ -151,13 +160,19 @@ function renderSimple(d) {
   const branch = gitBranch(cwd);
   const dir = cwd.split("/").pop() || "";
   if (dir) {
-    const br = branch ? ` ${DIM}→ ${TXT}${branch}` : "";
+    let br = branch ? ` ${DIM}→ ${TXT}${branch}` : "";
+    if (THEME === "slave") {
+      const ep = claudeEmailPrefix();
+      if (ep) br += ` ${DIM}· ${TXT}${ep}`;
+    }
     L1.push(`${TXT}${dir}${br}`);
   }
 
-  // Context
+  // Context — slave は 2行目の先頭、それ以外は 1行目
   const ctxPct = Math.round(d.context_window?.used_percentage ?? 0);
-  L1.push(`${DIM}ctx ${simpleStatusColor(ctxPct)}${BOLD}${ctxPct}%`);
+  const ctxSeg = `ctx ${simpleStatusColor(ctxPct)}${BOLD}${ctxPct}%`;
+  if (THEME === "slave") L2.push(`${RST}${BG}${DIM}${ctxSeg}`);
+  else L1.push(`${DIM}${ctxSeg}`);
 
   // 5h
   const five = d.rate_limits?.five_hour;
@@ -175,10 +190,12 @@ function renderSimple(d) {
     // Codex 使用率 (session 5h / week 7d)。コスト・継続時間の代わり。
     const cdx = codexUsage();
     if (cdx) {
-      L2.push(
+      let seg =
         `${RST}${BG}${DIM}cdx ${simpleStatusColor(cdx.session)}${BOLD}${cdx.session}%` +
-        `${RST}${BG}${DIM}/${simpleStatusColor(cdx.week)}${BOLD}${cdx.week}%`
-      );
+        `${RST}${BG}${DIM}/${simpleStatusColor(cdx.week)}${BOLD}${cdx.week}%`;
+      const cep = (cdx.email || "").split("@")[0];
+      if (cep) seg += ` ${TXT}${cep}`;
+      L2.push(seg);
     } else {
       L2.push(`${RST}${BG}${DIM}cdx ${TXT}—`);
     }
