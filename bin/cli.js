@@ -135,6 +135,7 @@ function renderSimple(d) {
   const BG  = "\x1b[48;2;28;28;34m";
   const DIM = "\x1b[38;2;85;85;100m";
   const TXT = "\x1b[38;2;165;165;178m";
+  const YEL = "\x1b[38;2;220;200;110m"; // muted yellow (email)
   const SEP = ` ${BG}${DIM}│ `;
 
   const L1 = [];
@@ -163,7 +164,7 @@ function renderSimple(d) {
     let br = branch ? ` ${DIM}→ ${TXT}${branch}` : "";
     if (THEME === "slave") {
       const ep = claudeEmailPrefix();
-      if (ep) br += ` ${DIM}· ${TXT}${ep}`;
+      if (ep) br += ` ${DIM}· ${YEL}${ep}`;
     }
     L1.push(`${TXT}${dir}${br}`);
   }
@@ -194,7 +195,7 @@ function renderSimple(d) {
         `${RST}${BG}${DIM}cdx ${simpleStatusColor(cdx.session)}${BOLD}${cdx.session}%` +
         `${RST}${BG}${DIM}/${simpleStatusColor(cdx.week)}${BOLD}${cdx.week}%`;
       const cep = (cdx.email || "").split("@")[0];
-      if (cep) seg += ` ${TXT}${cep}`;
+      if (cep) seg += ` ${YEL}${cep}`;
       L2.push(seg);
     } else {
       L2.push(`${RST}${BG}${DIM}cdx ${TXT}—`);
