@@ -185,7 +185,9 @@ function renderSimple(d) {
   // 7d
   const seven = d.rate_limits?.seven_day;
   const p7 = Math.round(seven?.used_percentage ?? 0);
-  L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${p7}%`);
+  let v7 = `${p7}%`;
+  if (seven?.resets_at) v7 += `${RST}${BG}${DIM}(${timeUntil(seven.resets_at)})`;
+  L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${v7}`);
 
   if (THEME === "slave") {
     // Codex 使用率 (session 5h / week 7d)。コスト・継続時間の代わり。
