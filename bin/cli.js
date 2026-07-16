@@ -115,6 +115,43 @@ function codexUsage() {
   return data;
 }
 
+// macker agent (:4477) のキャッシュ済み /v1/usage から Claude のモデル別 weekly
+// (tertiary — 現行は Fable の 7d 上限。statusline stdin の rate_limits には
+// five_hour/seven_day しか来ないのでここからしか取れない) を取得。agent が
+// codexbar probe を集約キャッシュしているので、読む分には usage endpoint への
+// 追加コストはゼロ。codexUsage() 同様、即読み + stale ならバックグラウンド更新。
+// agent 不在 / トークン無しのノードでは null (セグメントごと非表示)。
+function fableWeekly() {
+  const dir = `${homedir()}/.cache`;
+  const cacheFile = `${dir}/cc-statusline-fable.json`;
+  const TTL = 60_000; // 60秒
+
+  let pct = null, stale = true;
+  try {
+    const snap = JSON.parse(readFileSync(cacheFile, "utf8"));
+    const t = snap?.providers?.find((p) => p.provider === "claude")?.tertiary;
+    if (Number.isFinite(t?.used_percent)) pct = Math.round(t.used_percent);
+    const age = Date.now() - statSync(cacheFile).mtimeMs;
+    stale = age > TTL;
+    // 隣の 5h/7d は stdin 由来で常に新鮮 — agent が死んで更新が止まった古い
+    // 値をあたかも現在値のように並べない (30分で非表示に落とす)
+    if (age > 30 * 60_000) pct = null;
+  } catch { stale = true; }
+
+  if (stale) {
+    try {
+      mkdirSync(dir, { recursive: true });
+      const tmp = `${cacheFile}.${process.pid}.tmp`; // pid 付き tmp: 並行セッションの衝突回避
+      const child = spawn("sh", ["-c",
+        `curl -sf -m 5 -H "Authorization: Bearer $(cat "$HOME/.local/state/macker/agent.token")" http://127.0.0.1:4477/v1/usage > "${tmp}" 2>/dev/null && mv "${tmp}" "${cacheFile}" || rm -f "${tmp}"`,
+      ], { detached: true, stdio: "ignore" });
+      child.on("error", () => {}); // spawn の非同期エラーで statusline を道連れにしない
+      child.unref();
+    } catch {}
+  }
+  return pct;
+}
+
 // Claude アカウントのメールアドレスの prefix (@より前) を取得。
 function claudeEmailPrefix() {
   try {
@@ -190,6 +227,10 @@ function renderSimple(d) {
   L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${v7}`);
 
   if (THEME === "slave") {
+    // Fable weekly (Claude モデル別 7d 上限) — cdx の前に素の数字だけ置く
+    const fb = fableWeekly();
+    if (fb != null) L2.push(`${RST}${BG}${simpleStatusColor(fb)}${BOLD}${fb}%`);
+
     // Codex 使用率 (session 5h / week 7d)。コスト・継続時間の代わり。
     const cdx = codexUsage();
     if (cdx) {
