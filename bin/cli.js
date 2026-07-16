@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync, spawn } from "node:child_process";
-import { readFileSync, mkdirSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, unlinkSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 
 const RST = "\x1b[0m";
@@ -226,6 +226,45 @@ function renderSimple(d) {
   }
 }
 
+// --- Claude rate-limits tee ---
+// Claude Code はアカウントの 5h/7d 使用率を statusline stdin で渡してくる
+// (Messages API 応答由来 — 稼働中のセッションが常に最新値を持つ)。これを
+// ~/.cache/cc-statusline-claude.json へ書き出し、macker agent の usage
+// collector が codexbar probe の 429 時に代替ソースとして読む (bd macker-6dr2:
+// 忙しいノードほど usage endpoint の per-account 予算が枯れて外部 probe が
+// 全滅する — この tee は endpoint への追加リクエストゼロで逆転させる)。
+// statusline は描画のたびに走るので mtime で 10s に絞る。失敗しても
+// statusline 本体は絶対に壊さない。
+function teeRateLimits(d) {
+  try {
+    const rl = d.rate_limits;
+    if (!rl || (rl.five_hour == null && rl.seven_day == null)) return;
+    const file = `${homedir()}/.cache/cc-statusline-claude.json`;
+    try {
+      if (Date.now() - statSync(file).mtimeMs < 10_000) return;
+    } catch {}
+    mkdirSync(`${homedir()}/.cache`, { recursive: true });
+    let email = "";
+    try {
+      email = JSON.parse(readFileSync(`${homedir()}/.claude.json`, "utf8")).oauthAccount?.emailAddress || "";
+    } catch {}
+    const payload = JSON.stringify({
+      v: 1,
+      written_at: new Date().toISOString(),
+      email,
+      rate_limits: rl,
+    });
+    const tmp = `${file}.${process.pid}.tmp`; // pid 付き tmp: 並行セッションの衝突回避、rename は原子的
+    try {
+      writeFileSync(tmp, payload);
+      renameSync(tmp, file);
+    } catch (e) {
+      try { unlinkSync(tmp); } catch {} // rename 失敗時の残骸を残さない
+      throw e;
+    }
+  } catch {}
+}
+
 // --- Main ---
 
 let input = "";
@@ -234,6 +273,7 @@ process.stdin.on("data", (c) => (input += c));
 process.stdin.on("end", () => {
   try {
     const d = JSON.parse(input);
+    teeRateLimits(d);
 
     if (THEME.startsWith("simple") || THEME === "slave") { renderSimple(d); return; }
 
