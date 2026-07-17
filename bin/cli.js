@@ -117,10 +117,11 @@ function codexUsage() {
 
 // macker agent (:4477) のキャッシュ済み /v1/usage から Claude のモデル別 weekly
 // (tertiary — 現行は Fable の 7d 上限。statusline stdin の rate_limits には
-// five_hour/seven_day しか来ないのでここからしか取れない) を取得。agent が
-// codexbar probe を集約キャッシュしているので、読む分には usage endpoint への
-// 追加コストはゼロ。codexUsage() 同様、即読み + stale ならバックグラウンド更新。
-// agent 不在 / トークン無しのノードでは null (セグメントごと非表示)。
+// five_hour/seven_day しか来ないのでここからしか取れない) を取得し、
+// **残量% (100 - used)** を返す。agent が codexbar probe を集約キャッシュして
+// いるので、読む分には usage endpoint への追加コストはゼロ。codexUsage() 同様、
+// 即読み + stale ならバックグラウンド更新。agent 不在 / トークン無し / 観測が
+// 古すぎるノードでは null (呼び側が — 表記に落とす)。
 function fableWeekly() {
   const dir = `${homedir()}/.cache`;
   const cacheFile = `${dir}/cc-statusline-fable.json`;
@@ -130,7 +131,7 @@ function fableWeekly() {
   try {
     const snap = JSON.parse(readFileSync(cacheFile, "utf8"));
     const t = snap?.providers?.find((p) => p.provider === "claude")?.tertiary;
-    if (Number.isFinite(t?.used_percent)) pct = Math.round(t.used_percent);
+    if (Number.isFinite(t?.used_percent)) pct = Math.max(0, 100 - Math.round(t.used_percent));
     // agent は probe 飢餓中も最後の観測値を carry して返す (HTTP は成功し続ける
     // のでキャッシュ mtime では検出不能)。observed_at が古すぎる値は隠す —
     // weekly は動きが遅いので 2h までは現在値扱い。observed_at 不在/不正は
@@ -139,7 +140,7 @@ function fableWeekly() {
     const age = Date.now() - statSync(cacheFile).mtimeMs;
     stale = age > TTL;
     // 隣の 5h/7d は stdin 由来で常に新鮮 — agent が死んで更新が止まった古い
-    // 値をあたかも現在値のように並べない (30分で非表示に落とす)
+    // 値をあたかも現在値のように並べない (30分で — 表記に落とす)
     if (age > 30 * 60_000) pct = null;
   } catch { stale = true; }
 
@@ -232,9 +233,13 @@ function renderSimple(d) {
   L2.push(`${RST}${BG}${DIM}7d ${simpleStatusColor(p7)}${BOLD}${v7}`);
 
   if (THEME === "slave") {
-    // Fable weekly (Claude モデル別 7d 上限) — cdx の前に素の数字だけ置く
+    // Fable weekly の残量% (Claude モデル別 7d 上限) — cdx の前に素の数字だけ
+    // 置く。取れない/古すぎる時は隠さず — 表記 (cdx の fallback と同じ流儀)。
+    // 色は使用率基準に戻して評価 (残量が少ないほど rose)。
     const fb = fableWeekly();
-    if (fb != null) L2.push(`${RST}${BG}${simpleStatusColor(fb)}${BOLD}${fb}%`);
+    L2.push(fb != null
+      ? `${RST}${BG}${simpleStatusColor(100 - fb)}${BOLD}${fb}%`
+      : `${RST}${BG}${DIM}—`);
 
     // Codex 使用率 (session 5h / week 7d)。コスト・継続時間の代わり。
     const cdx = codexUsage();
