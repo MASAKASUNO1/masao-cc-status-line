@@ -131,6 +131,11 @@ function fableWeekly() {
     const snap = JSON.parse(readFileSync(cacheFile, "utf8"));
     const t = snap?.providers?.find((p) => p.provider === "claude")?.tertiary;
     if (Number.isFinite(t?.used_percent)) pct = Math.round(t.used_percent);
+    // agent は probe 飢餓中も最後の観測値を carry して返す (HTTP は成功し続ける
+    // のでキャッシュ mtime では検出不能)。observed_at が古すぎる値は隠す —
+    // weekly は動きが遅いので 2h までは現在値扱い。observed_at 不在/不正は
+    // 旧 agent 互換で表示継続 (NaN 比較は false に落ちる)。
+    if (pct != null && Date.now() - Date.parse(t.observed_at) > 2 * 3600_000) pct = null;
     const age = Date.now() - statSync(cacheFile).mtimeMs;
     stale = age > TTL;
     // 隣の 5h/7d は stdin 由来で常に新鮮 — agent が死んで更新が止まった古い

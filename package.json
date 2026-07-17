@@ -1,6 +1,6 @@
 {
   "name": "masao-cc-status-line",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Minimal & refined Claude Code status line",
   "type": "module",
   "bin": "./bin/cli.js",
